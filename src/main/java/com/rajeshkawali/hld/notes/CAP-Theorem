@@ -1,0 +1,69 @@
+CAP Theorem — Beginner-friendly High-Level Notes:
+
+Overview:
+- CAP theorem (Brewer's theorem) states that a distributed data system can guarantee at most two of these three properties at the same time:
+  * Consistency (C)
+  * Availability (A)
+  * Partition Tolerance (P)
+
+Definitions:
+- Consistency (C):
+  * Every read receives the most recent write (or an error).
+  * Equivalent to linearizability/strong consistency in many contexts.
+  * Example: After you write "X=5", any subsequent read returns 5.
+
+- Availability (A):
+  * Every request (read or write) receives a non-error response (not necessarily the latest value).
+  * System always responds to clients (no indefinite failures).
+
+- Partition Tolerance (P):
+  * The system continues to operate despite arbitrary network partitions (i.e., messages lost or delayed between nodes).
+  * In practice, partitions happen (network failures, datacenter link loss), so P is usually required for real distributed systems.
+
+Key idea:
+- In presence of a network partition (P), you must choose between Consistency and Availability.
+  * If you choose C (CP system): you sacrifice Availability during partitions to preserve consistency (some requests may fail or block).
+  * If you choose A (AP system): you sacrifice Consistency during partitions to remain available (serve possibly stale data).
+
+Why Partition Tolerance matters:
+- Real networks are unreliable: packets drop, links fail, nodes get isolated.
+- For any system spanning multiple machines or datacenters, partitions are possible and must be handled.
+- Therefore, most practical distributed systems are designed to be partition tolerant (P = true), and the real tradeoff is between C and A.
+
+Practical examples:
+- CP systems (Consistency + Partition tolerance):
+  * Example: Traditional relational databases with distributed consensus (e.g., CP mode of MongoDB, HBase with strong consistency, etc.)
+  * Behavior: During a partition, some nodes refuse to serve requests to avoid returning stale or conflicting data. Clients may see errors or timeouts until partition heals.
+- AP systems (Availability + Partition tolerance):
+  * Example: DNS, many NoSQL stores in eventual-consistency mode (e.g., Dynamo-style systems, Cassandra in certain configurations).
+  * Behavior: During a partition, nodes continue to serve reads/writes; different nodes may accept different writes leading to temporary inconsistency; reconciliation happens later (eventual consistency).
+
+Important clarifications:
+- CAP is about behavior under network partitions. If there is no partition, a system can be both consistent and available.
+- CAP is a theoretical, coarse-grained guideline — real systems use nuanced consistency models (strong, causal, eventual) and hybrid approaches.
+- "Consistency" in CAP is not the same as SQL ACID semantics; CAP's consistency is about single-copy semantics (linearizability).
+- Systems often offer tunable tradeoffs (e.g., quorum reads/writes, configurable replication) to move between stronger consistency and higher availability.
+
+Design implications and patterns:
+- If your application cannot tolerate stale reads (banking, inventory), favor CP: prefer strong consistency, accept reduced availability during partitions.
+- If your application must remain responsive (social feeds, analytics), favor AP: accept eventual consistency and resolve conflicts later.
+- Use techniques to mitigate tradeoffs:
+  * Quorum protocols (R/W/N): require majority for reads/writes to increase consistency.
+  * Leader-based replication: single leader serializes writes (simpler consistency).
+  * Conflict resolution: vector clocks, CRDTs, last-write-wins, application-level merge.
+  * Graceful degradation: read-only mode, degraded features during partitions.
+  * Retry/backoff and idempotency for clients.
+
+Simple mental model:
+- Think of CAP as: "When the network splits, do you want correct data (C) or do you want the system to keep answering (A)?" Partition tolerance (P) is usually non-negotiable in distributed systems.
+
+Quick checklist for interviews:
+- Define C, A, P in one line each.
+- State the CAP tradeoff only applies when partitions occur.
+- Give one CP and one AP example and explain behavior during partition.
+- Mention practical mitigations: quorums, leader election, CRDTs, eventual consistency.
+- Note: CAP is a guideline; modern systems use richer consistency models.
+
+One-line summary:
+- Under network partitions, you must choose between consistency and availability; partition tolerance is required for real distributed systems, so the real tradeoff is C vs A.
+
