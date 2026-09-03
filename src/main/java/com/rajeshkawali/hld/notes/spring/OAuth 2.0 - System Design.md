@@ -1,0 +1,3408 @@
+# OAuth 2.0 — Detailed System Design & Interview Notes
+
+## 1. What is OAuth 2.0?
+
+**OAuth 2.0** is an authorization framework that allows an application to access a user's protected resources **without sharing the user's password with that application**.
+
+### Simple Example
+
+Suppose you build:
+
+```text
+MyPhotoApp
+```
+
+and want the user to select photos from Google Photos.
+
+You should NOT ask the user:
+
+```text
+Google Email
+Google Password
+```
+
+Instead, Google provides an authorization flow:
+
+```text
+User
+  ↓
+MyPhotoApp
+  ↓
+Google Authorization Server
+  ↓
+User approves permission
+  ↓
+Authorization Code
+  ↓
+Access Token
+  ↓
+Google APIs
+  ↓
+User Photos
+```
+
+The application gets limited permission rather than the user's password.
+
+---
+
+# 2. OAuth 2.0 Is About Authorization
+
+Very important interview distinction:
+
+```text
+Authentication
+→ Who are you?
+
+Authorization
+→ What are you allowed to do?
+```
+
+OAuth 2.0 primarily solves:
+
+```text
+Authorization
+```
+
+It does not, by itself, define user authentication.
+
+For user authentication/login:
+
+```text
+OAuth 2.0
++
+OpenID Connect (OIDC)
+```
+
+is commonly used.
+
+### Example
+
+```text
+Login with Google
+```
+
+typically involves:
+
+```text
+OIDC → Identity / Authentication
+OAuth 2.0 → Authorization
+```
+
+---
+
+# 3. OAuth 2.0 Main Components
+
+OAuth terminology is very important.
+
+```text
+Resource Owner
+Client
+Authorization Server
+Resource Server
+```
+
+---
+
+## 3.1 Resource Owner
+
+Usually the user who owns the data.
+
+Example:
+
+```text
+User
+```
+
+The user owns:
+
+```text
+Photos
+Emails
+Files
+Calendar
+```
+
+---
+
+## 3.2 Client
+
+The application requesting access to the resource.
+
+Example:
+
+```text
+Web Application
+Mobile Application
+Backend Service
+```
+
+Example:
+
+```text
+MyPhotoApp
+```
+
+---
+
+## 3.3 Authorization Server
+
+The server that:
+
+- Authenticates the user
+- Requests consent
+- Issues authorization codes
+- Issues access tokens
+- Issues refresh tokens where applicable
+
+Example:
+
+```text
+auth.example.com
+```
+
+---
+
+## 3.4 Resource Server
+
+The server that actually owns/provides the protected API.
+
+Example:
+
+```text
+api.example.com/photos
+```
+
+The resource server receives:
+
+```text
+Access Token
+```
+
+and decides whether the request is authorized.
+
+---
+
+# 4. Complete OAuth Architecture
+
+```text
+                         User
+                          |
+                          v
+                       Client
+                   (Web/Mobile App)
+                          |
+                          | Authorization Request
+                          v
+                +----------------------+
+                | Authorization Server |
+                |                      |
+                | Login + Consent      |
+                | Token Issuing        |
+                +----------------------+
+                          |
+                          | Access Token
+                          v
+                +----------------------+
+                |    Resource Server   |
+                |                      |
+                |    Protected APIs    |
+                +----------------------+
+```
+
+A more complete system:
+
+```text
+User
+ |
+ v
+Client Application
+ |
+ +------------------------+
+ |                        |
+ v                        v
+Authorization Server   Resource Server
+ |                        |
+ | Tokens                 | APIs
+ |                        |
+ +----------+-------------+
+            |
+        Identity DB
+```
+
+---
+
+# 5. OAuth 2.0 Flow — Authorization Code
+
+For user-facing applications, the **Authorization Code flow** is one of the most important flows to understand.
+
+Modern public clients should use:
+
+```text
+Authorization Code + PKCE
+```
+
+---
+
+# 6. Step 1 — Client Redirects User
+
+The application sends the user to the authorization endpoint.
+
+Example:
+
+```http
+GET /authorize?
+    response_type=code
+    &client_id=my-client
+    &redirect_uri=https://myapp.com/callback
+    &scope=read:photos
+    &state=abc123
+    &code_challenge=XYZ...
+    &code_challenge_method=S256
+```
+
+### Important Parameters
+
+```text
+response_type=code
+→ Request authorization code
+
+client_id
+→ Identifies the client
+
+redirect_uri
+→ Where authorization server sends the result
+
+scope
+→ Permissions requested
+
+state
+→ Protects against request forgery / response mix-up
+
+code_challenge
+→ PKCE challenge
+
+code_challenge_method=S256
+→ SHA-256 based PKCE method
+```
+
+---
+
+# 7. What is Scope?
+
+Scope defines what the client is allowed to do.
+
+Example:
+
+```text
+scope=read:photos
+```
+
+Other examples:
+
+```text
+read:user
+write:user
+read:orders
+write:orders
+read:calendar
+```
+
+The user may see:
+
+```text
+MyPhotoApp wants:
+✓ Read your photos
+✗ Delete photos
+```
+
+### Principle
+
+> Ask only for the minimum permissions required.
+
+This is the **principle of least privilege**.
+
+---
+
+# 8. What is state?
+
+`state` is a random value generated by the client.
+
+Example:
+
+```text
+state=abc123random
+```
+
+The client remembers it.
+
+After authorization:
+
+```text
+https://myapp.com/callback?code=CODE123&state=abc123random
+```
+
+The client validates:
+
+```text
+Returned state
+==
+Original state
+```
+
+If they don't match:
+
+```text
+Reject request
+```
+
+This protects against certain CSRF/login-flow attacks.
+
+---
+
+# 9. User Logs In
+
+The Authorization Server handles authentication.
+
+Example:
+
+```text
+User
+  ↓
+Authorization Server
+  ↓
+Username + Password / MFA / Passkey / SSO
+  ↓
+User authenticated
+```
+
+The client application should not receive the user's authorization-server password.
+
+---
+
+# 10. User Gives Consent
+
+The authorization server may show:
+
+```text
+MyPhotoApp requests:
+
+✓ Read photos
+✓ Read profile
+
+[Allow] [Deny]
+```
+
+If the user approves:
+
+```text
+Authorization Granted
+```
+
+---
+
+# 11. Step 2 — Authorization Server Returns Code
+
+The browser is redirected:
+
+```http
+HTTP/1.1 302 Found
+Location: https://myapp.com/callback?code=AUTH_CODE_123&state=abc123
+```
+
+The client receives:
+
+```text
+AUTH_CODE_123
+```
+
+### Important
+
+The authorization code is:
+
+```text
+Short-lived
+One-time/short-use
+Not the final API credential
+```
+
+---
+
+# 12. Why Don't We Give Access Token Directly in Browser URL?
+
+Because URLs can leak through:
+
+```text
+Browser history
+Logs
+Referrer behavior
+Monitoring systems
+Screenshots
+```
+
+Therefore modern authorization-code flows separate:
+
+```text
+Authorization Code
+```
+
+from:
+
+```text
+Access Token
+```
+
+The code is exchanged at the token endpoint.
+
+---
+
+# 13. Step 3 — Exchange Authorization Code for Tokens
+
+The client sends:
+
+```http
+POST /token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&
+code=AUTH_CODE_123&
+redirect_uri=https%3A%2F%2Fmyapp.com%2Fcallback&
+client_id=my-client&
+code_verifier=abc_verifier_xyz
+```
+
+For a confidential client, client authentication is typically also performed according to the authorization server's configured method.
+
+---
+
+# 14. Token Response
+
+Example:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "access_token": "eyJhbGciOi...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "8xR...xyz",
+  "scope": "read:photos"
+}
+```
+
+Important fields:
+
+```text
+access_token
+→ Used to call protected APIs
+
+token_type
+→ Usually Bearer
+
+expires_in
+→ Access-token lifetime
+
+refresh_token
+→ Used to obtain a new access token when supported
+
+scope
+→ Granted permissions
+```
+
+---
+
+# 15. Access Token
+
+The access token represents the authorization granted to the client.
+
+Client uses:
+
+```http
+GET /photos
+Authorization: Bearer eyJhbGciOi...
+```
+
+---
+
+# 16. Resource Server Validates Access Token
+
+The resource server checks:
+
+```text
+Token valid?
+Token expired?
+Correct issuer?
+Correct audience?
+Required scope?
+Signature valid?
+Revoked/active if applicable?
+```
+
+Then:
+
+```text
+Authorized
+```
+
+or:
+
+```http
+HTTP/1.1 403 Forbidden
+```
+
+---
+
+# 17. 401 vs 403
+
+Very common interview question.
+
+## 401 Unauthorized
+
+Usually means:
+
+```text
+Authentication credentials are missing/invalid
+```
+
+Example:
+
+```text
+No access token
+Expired token
+Invalid token
+```
+
+---
+
+## 403 Forbidden
+
+Usually means:
+
+```text
+Request is understood,
+but caller does not have sufficient permission.
+```
+
+Example:
+
+```text
+Token valid
+Scope = read:photos
+
+Request:
+DELETE /photos/123
+
+Required scope:
+write:photos
+```
+
+Result:
+
+```text
+403 Forbidden
+```
+
+### Easy Recall
+
+```text
+401 → "Who are you / credentials invalid?"
+
+403 → "I know who you are, but you can't do this."
+```
+
+---
+
+# 18. Refresh Token
+
+Access tokens are generally short-lived.
+
+Example:
+
+```text
+Access Token
+TTL = 1 hour
+```
+
+After expiration:
+
+```text
+Access Token expired
+```
+
+The client can use the refresh token to request a new access token, when the authorization server issued one and the client is permitted to use it.
+
+```http
+POST /token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token&
+refresh_token=REFRESH_TOKEN_123
+```
+
+Response:
+
+```json
+{
+  "access_token": "NEW_ACCESS_TOKEN",
+  "token_type": "Bearer",
+  "expires_in": 3600
+}
+```
+
+Depending on the authorization server, a new refresh token may also be returned.
+
+---
+
+# 19. Why Short-Lived Access Tokens?
+
+Suppose:
+
+```text
+Access Token
+TTL = 1 hour
+```
+
+If stolen:
+
+```text
+Attacker
+   ↓
+Access Token
+   ↓
+Can use it until it expires or is otherwise invalidated
+```
+
+Shorter lifetime reduces the attack window.
+
+This is one reason refresh tokens exist:
+
+```text
+Short-lived Access Token
++
+Longer-lived Refresh Token
+```
+
+---
+
+# 20. Refresh Token Security
+
+Refresh tokens are highly sensitive.
+
+They should be:
+
+- Stored securely
+- Protected from unnecessary exposure
+- Sent only to the authorization server
+- Bound to the correct client where applicable
+- Rotated where supported/appropriate
+- Revoked when needed
+
+For public clients, secure platform-specific storage is important.
+
+---
+
+# 21. PKCE
+
+PKCE = **Proof Key for Code Exchange**.
+
+It protects the authorization code flow, especially for public clients such as mobile and single-page applications.
+
+Flow:
+
+```text
+Client generates:
+
+code_verifier
+     ↓
+Hash
+     ↓
+code_challenge
+```
+
+Authorization request:
+
+```text
+code_challenge=XYZ
+```
+
+Token request:
+
+```text
+code_verifier=ORIGINAL_SECRET
+```
+
+Authorization server verifies:
+
+```text
+Hash(code_verifier)
+        ==
+code_challenge
+```
+
+If yes:
+
+```text
+Issue Token
+```
+
+---
+
+# 22. Why PKCE?
+
+Suppose an attacker steals:
+
+```text
+Authorization Code
+```
+
+Without PKCE, they may attempt to exchange it.
+
+With PKCE:
+
+```text
+Attacker has code
+BUT
+doesn't have code_verifier
+```
+
+Therefore the exchange fails.
+
+### Easy Recall
+
+```text
+Authorization Code
++
+PKCE verifier
+=
+Safer code exchange
+```
+
+---
+
+# 23. Authorization Code + PKCE Flow
+
+```text
+Client
+ |
+ | Generate code_verifier
+ | Generate code_challenge
+ |
+ v
+Authorization Server
+ |
+ | User Login
+ | User Consent
+ |
+ v
+Authorization Code
+ |
+ v
+Client Callback
+ |
+ | code + code_verifier
+ v
+Token Endpoint
+ |
+ v
+Access Token
+ |
+ v
+Resource Server
+```
+
+---
+
+# 24. Client Credentials Grant
+
+Used for **machine-to-machine** authorization where there is no end-user in the flow.
+
+Example:
+
+```text
+Order Service
+      |
+      v
+Payment Service
+```
+
+Order Service needs to call a protected Payment API.
+
+Request:
+
+```http
+POST /token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&
+scope=payments:write
+```
+
+The client authenticates to the authorization server using its configured client-authentication method.
+
+Response:
+
+```json
+{
+  "access_token": "eyJ...",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "scope": "payments:write"
+}
+```
+
+Then:
+
+```http
+POST /payments
+Authorization: Bearer eyJ...
+```
+
+---
+
+# 25. When to Use Client Credentials?
+
+Use it when:
+
+```text
+Machine → Machine
+```
+
+Examples:
+
+```text
+Order Service → Payment Service
+Reporting Service → Analytics API
+Backend → Third-party API
+```
+
+Not when:
+
+```text
+User → Application
+```
+
+For end-user authorization, Authorization Code + PKCE is usually the appropriate model.
+
+---
+
+# 26. Client Credentials Architecture
+
+```text
+Order Service
+      |
+      | client credentials
+      v
+Authorization Server
+      |
+      | Access Token
+      v
+Order Service
+      |
+      | Bearer Token
+      v
+Payment API
+```
+
+---
+
+# 27. Device Authorization Grant
+
+Useful for devices that have limited input capabilities.
+
+Examples:
+
+```text
+Smart TV
+Game Console
+Streaming Device
+IoT-like user-facing device
+```
+
+Flow:
+
+```text
+TV
+ ↓
+Authorization Server
+ ↓
+User gets:
+URL + Device/User Code
+ ↓
+User uses phone/computer
+ ↓
+Approves access
+ ↓
+TV obtains token
+```
+
+---
+
+# 28. Implicit Flow
+
+The OAuth 2.0 **Implicit Grant** is an older pattern and is generally not recommended for modern applications.
+
+Instead, prefer:
+
+```text
+Authorization Code
++
+PKCE
+```
+
+### Interview answer
+
+> If asked about the Implicit flow, I would mention it for historical context, but I would choose Authorization Code + PKCE for modern clients.
+
+---
+
+# 29. Password Grant
+
+The Resource Owner Password Credentials grant is also an older pattern and should generally not be used for new systems.
+
+The fundamental problem is that the client directly receives the user's credentials.
+
+Modern applications should use an authorization-server-hosted login flow instead.
+
+---
+
+# 30. OAuth Tokens — JWT vs Opaque
+
+Access tokens can be:
+
+```text
+JWT
+```
+
+or:
+
+```text
+Opaque token
+```
+
+---
+
+## JWT Access Token
+
+Example:
+
+```text
+eyJhbGciOiJIUzI1NiJ9...
+```
+
+Contains claims such as:
+
+```json
+{
+  "iss": "https://auth.example.com",
+  "sub": "user-123",
+  "aud": "photos-api",
+  "scope": "read:photos",
+  "exp": 1760000000
+}
+```
+
+The resource server can validate the token locally if it has the required cryptographic verification material.
+
+---
+
+# 31. JWT Advantages
+
+```text
++ Stateless validation
++ Resource server may not need a token introspection call
++ Scales well across many API servers
++ Contains useful claims
+```
+
+---
+
+# 32. JWT Disadvantages
+
+```text
+- Revocation is more difficult
+- Token can become stale
+- Token size can be larger
+- Claims must be carefully chosen
+- Key rotation must be handled
+```
+
+---
+
+# 33. Opaque Token
+
+Instead of embedding claims:
+
+```text
+token = A8F2K9...
+```
+
+The resource server can call an introspection endpoint or another authorization mechanism.
+
+```text
+Resource Server
+      |
+      | introspect token
+      v
+Authorization Server
+      |
+      v
+Active?
+Scope?
+Audience?
+```
+
+---
+
+# 34. Opaque Token Advantages
+
+```text
++ Easier centralized revocation
++ Token contains less information
++ Authorization state can remain centralized
+```
+
+### Disadvantages
+
+```text
+- Extra network call
+- More latency
+- Authorization server can become a dependency
+- Requires caching/circuit-breaker considerations
+```
+
+---
+
+# 35. JWT vs Opaque Token
+
+| Feature | JWT | Opaque |
+|---|---|---|
+| Self-contained | Yes | No |
+| Local validation | Usually | Usually no |
+| Introspection call | Often unnecessary | Common |
+| Revocation | Harder | Easier |
+| Token size | Larger | Smaller |
+| Stateless API validation | Good | Less direct |
+| Central control | Lower | Higher |
+
+### Interview Answer
+
+> I would choose JWT when scalable local validation and self-contained claims are valuable. I would choose opaque tokens when centralized control and easier revocation are more important.
+
+---
+
+# 36. Access Token vs Refresh Token
+
+| Access Token | Refresh Token |
+|---|---|
+| Calls protected APIs | Gets new access tokens |
+| Usually short-lived | Usually longer-lived |
+| Sent to resource server | Usually only sent to auth server |
+| Higher exposure | More sensitive |
+| Often in Authorization header | Protected storage required |
+
+### Easy Recall
+
+```text
+Access Token
+→ Access API
+
+Refresh Token
+→ Refresh Access Token
+```
+
+---
+
+# 37. Scope vs Role
+
+These are related but different.
+
+## Scope
+
+OAuth client permission.
+
+Example:
+
+```text
+read:photos
+write:photos
+```
+
+## Role
+
+Application/domain-level role.
+
+Example:
+
+```text
+admin
+manager
+customer
+```
+
+A request may require:
+
+```text
+OAuth scope
++
+Application role
++
+Resource ownership
+```
+
+Example:
+
+```text
+Scope:
+orders:write
+
+Role:
+customer
+
+Resource rule:
+Only modify own order
+```
+
+Authorization should not rely solely on a token's scope.
+
+---
+
+# 38. Audience (`aud`)
+
+The `aud` claim identifies the intended recipient/resource server.
+
+Example:
+
+```json
+{
+  "aud": "orders-api"
+}
+```
+
+A token intended for:
+
+```text
+orders-api
+```
+
+should not automatically be accepted by:
+
+```text
+payments-api
+```
+
+### Interview Importance
+
+Always validate the intended audience where appropriate.
+
+---
+
+# 39. Issuer (`iss`)
+
+The issuer identifies who created the token.
+
+Example:
+
+```json
+{
+  "iss": "https://auth.example.com"
+}
+```
+
+The resource server should validate that the token came from a trusted issuer.
+
+---
+
+# 40. Subject (`sub`)
+
+Identifies the principal associated with the token.
+
+Example:
+
+```json
+{
+  "sub": "user-123"
+}
+```
+
+Do not confuse:
+
+```text
+sub
+```
+
+with:
+
+```text
+client_id
+```
+
+`sub` identifies the subject/principal; `client_id` identifies the client application.
+
+---
+
+# 41. Expiration (`exp`)
+
+Example:
+
+```json
+{
+  "exp": 1760000000
+}
+```
+
+The resource server should reject expired tokens.
+
+---
+
+# 42. Typical JWT Claims
+
+A simplified example:
+
+```json
+{
+  "iss": "https://auth.example.com",
+  "sub": "user-123",
+  "aud": "orders-api",
+  "scope": "orders:read orders:write",
+  "exp": 1760000000,
+  "iat": 1759996400
+}
+```
+
+Common claims:
+
+```text
+iss → issuer
+sub → subject
+aud → audience
+exp → expiration
+iat → issued-at time
+scope → permissions
+```
+
+Additional claims may be application-specific.
+
+---
+
+# 43. API Request Example
+
+Client wants:
+
+```text
+GET /orders/123
+```
+
+Request:
+
+```http
+GET /orders/123 HTTP/1.1
+Host: api.example.com
+Authorization: Bearer eyJhbGciOi...
+```
+
+Resource server:
+
+```text
+1. Extract token
+2. Validate signature/introspection
+3. Check issuer
+4. Check audience
+5. Check expiration
+6. Check scope
+7. Check business authorization
+8. Return order
+```
+
+---
+
+# 44. Successful API Response
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "order_id": "123",
+  "status": "SHIPPED",
+  "total": 149.99
+}
+```
+
+---
+
+# 45. Invalid Token Response
+
+Example:
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer error="invalid_token"
+
+{
+  "error": "invalid_token"
+}
+```
+
+---
+
+# 46. Insufficient Scope Response
+
+Suppose the token is valid but lacks permission.
+
+```text
+Required:
+orders:write
+
+Granted:
+orders:read
+```
+
+Response:
+
+```http
+HTTP/1.1 403 Forbidden
+WWW-Authenticate: Bearer error="insufficient_scope", scope="orders:write"
+
+{
+  "error": "insufficient_scope"
+}
+```
+
+Exact error-response format depends on the implementation.
+
+---
+
+# 47. Complete Authorization Code API Flow
+
+```text
+1. Client
+   |
+   | GET /authorize
+   v
+2. Authorization Server
+   |
+   | Login + Consent
+   v
+3. User
+   |
+   | Approve
+   v
+4. Authorization Server
+   |
+   | 302 redirect with code
+   v
+5. Client Callback
+   |
+   | POST /token
+   | code + code_verifier
+   v
+6. Authorization Server
+   |
+   | Access Token
+   v
+7. Client
+   |
+   | Authorization: Bearer TOKEN
+   v
+8. Resource Server
+   |
+   | Validate token
+   v
+9. Protected Resource
+```
+
+---
+
+# 48. OAuth System Design
+
+Suppose we need to design an OAuth platform.
+
+Requirements:
+
+```text
+1. User authorization
+2. Client registration
+3. Token generation
+4. Token validation
+5. Token refresh
+6. Consent management
+7. Scope management
+8. Token revocation
+9. Audit logging
+10. High availability
+11. Key rotation
+12. Security
+```
+
+Architecture:
+
+```text
+                           Clients
+                              |
+                              v
+                       API Gateway / WAF
+                              |
+               +--------------+--------------+
+               |                             |
+               v                             v
+       Authorization Server           Resource Server
+               |                             |
+       +-------+--------+                    |
+       |       |        |                    |
+       v       v        v                    v
+   Auth DB  Client DB  Consent DB        Business DB
+       |
+       v
+  Token / Session Store
+       |
+       v
+  Key Management / JWKS
+```
+
+---
+
+# 49. Authorization Server Responsibilities
+
+The authorization server may contain:
+
+```text
+Authorization Endpoint
+Token Endpoint
+Client Registration
+Consent Management
+Authorization Policy
+Token Service
+Refresh Token Service
+Revocation Endpoint
+Introspection Endpoint
+JWKS Endpoint
+Audit Logging
+```
+
+---
+
+# 50. Resource Server Responsibilities
+
+The resource server:
+
+```text
+1. Receives API request
+2. Extracts access token
+3. Validates token
+4. Checks audience
+5. Checks scope/permissions
+6. Checks domain-level authorization
+7. Executes business operation
+```
+
+Important:
+
+> The resource server should enforce authorization, not blindly trust that the client is allowed to perform every action just because a token exists.
+
+---
+
+# 51. Client Registration
+
+Before using OAuth, a client usually needs to be registered.
+
+Example:
+
+```text
+client_id = app-123
+```
+
+The registration may contain:
+
+```text
+client_id
+redirect_uris
+allowed grant types
+allowed scopes
+token endpoint auth method
+application type
+```
+
+For confidential clients, there may also be:
+
+```text
+client credential
+```
+
+Client secrets are not suitable for public clients that cannot keep secrets.
+
+---
+
+# 52. Public vs Confidential Client
+
+## Public Client
+
+Cannot securely keep a secret.
+
+Examples:
+
+```text
+Mobile App
+Browser SPA
+```
+
+Use:
+
+```text
+Authorization Code + PKCE
+```
+
+---
+
+## Confidential Client
+
+Can protect credentials on a trusted backend.
+
+Examples:
+
+```text
+Server-side Web App
+Backend Service
+```
+
+Can use an appropriate client authentication mechanism.
+
+---
+
+# 53. Public vs Confidential
+
+| Type | Can keep client secret? | Example |
+|---|---|---|
+| Public | No | Mobile/SPA |
+| Confidential | Yes, if securely deployed | Backend |
+
+### Important
+
+Never ship a confidential client secret inside:
+
+```text
+Mobile application
+Browser JavaScript
+```
+
+because the user can extract it.
+
+---
+
+# 54. Token Introspection
+
+An introspection endpoint can answer:
+
+```text
+Is this token active?
+Who is it for?
+What scopes does it have?
+When does it expire?
+```
+
+Example:
+
+```http
+POST /introspect
+Content-Type: application/x-www-form-urlencoded
+
+token=OPAQUE_TOKEN_123
+```
+
+Response:
+
+```json
+{
+  "active": true,
+  "client_id": "client-123",
+  "sub": "user-100",
+  "scope": "orders:read",
+  "aud": "orders-api",
+  "exp": 1760000000
+}
+```
+
+---
+
+# 55. Token Revocation
+
+Sometimes the system must invalidate a token.
+
+Example:
+
+```text
+User disconnects application
+Client compromised
+Security incident
+Logout / administrative action
+```
+
+Example:
+
+```http
+POST /revoke
+Content-Type: application/x-www-form-urlencoded
+
+token=REFRESH_TOKEN_123
+```
+
+The exact endpoint behavior depends on the authorization server.
+
+---
+
+# 56. JWT Revocation Problem
+
+Suppose:
+
+```text
+JWT access token
+TTL = 1 hour
+```
+
+It has already been issued.
+
+If you want to revoke it immediately:
+
+```text
+JWT
+ ↓
+Already signed
+ ↓
+Resource server can still validate it
+```
+
+Possible approaches:
+
+```text
+Short access-token lifetime
+Token introspection
+Revocation lists
+Token versioning
+Central session state
+```
+
+Each introduces trade-offs.
+
+---
+
+# 57. Key Rotation
+
+If JWTs are signed with a private key, the authorization server may rotate signing keys.
+
+Conceptually:
+
+```text
+Key-1
+ ↓
+Key-2
+ ↓
+Key-3
+```
+
+Resource servers retrieve public keys through a JWKS endpoint.
+
+```text
+Authorization Server
+      |
+      v
+JWKS
+      |
+      v
+Resource Server
+```
+
+The resource server can use the appropriate public key based on the token's key identifier (`kid`).
+
+---
+
+# 58. Why Key Rotation?
+
+Security reasons:
+
+```text
+Limit exposure of compromised keys
++
+Regular key hygiene
++
+Support cryptographic lifecycle management
+```
+
+During rotation, systems usually need an overlap period so tokens signed with the previous key can still be validated until they expire.
+
+---
+
+# 59. OAuth + API Gateway
+
+A common architecture:
+
+```text
+Client
+  |
+  v
+API Gateway
+  |
+  +---- Validate token
+  +---- Rate Limit
+  +---- Route
+  +---- Audit
+  |
+  v
+Microservices
+```
+
+The gateway can perform basic token validation, but downstream services may still need to perform authorization checks.
+
+### Important
+
+Do not put all business authorization logic only in the gateway.
+
+Example:
+
+```text
+Gateway:
+Token valid?
+
+Order Service:
+Can this user modify Order 123?
+```
+
+These are different questions.
+
+---
+
+# 60. OAuth in Microservices
+
+Example:
+
+```text
+Client
+  |
+  v
+API Gateway
+  |
+  +------> Order Service
+  |
+  +------> Payment Service
+  |
+  +------> User Service
+```
+
+Token:
+
+```text
+scope = orders:read
+```
+
+Order Service checks:
+
+```text
+orders:read
+```
+
+Payment Service may require:
+
+```text
+payments:write
+```
+
+Therefore each service can enforce its own resource-specific authorization.
+
+---
+
+# 61. Service-to-Service OAuth
+
+Example:
+
+```text
+Order Service
+      |
+      | Client Credentials
+      v
+Authorization Server
+      |
+      | Access Token
+      v
+Order Service
+      |
+      | Bearer token
+      v
+Payment Service
+```
+
+Payment Service checks:
+
+```text
+iss
+aud
+exp
+scope
+```
+
+and business rules.
+
+---
+
+# 62. OAuth vs API Key
+
+## API Key
+
+Simple identifier/credential.
+
+```text
+Authorization: ApiKey ABC123
+```
+
+Good for:
+
+```text
+Simple server-to-server integrations
+Developer APIs
+Basic project identification
+```
+
+## OAuth
+
+Provides:
+
+```text
+Delegated authorization
+Scopes
+User consent
+Token lifecycle
+Refresh
+Client identity
+```
+
+### Easy Recall
+
+```text
+API Key
+→ "Which client is calling?"
+
+OAuth
+→ "What is this client allowed to access?"
+```
+
+An API key system can have its own authorization model, but OAuth is designed specifically around delegated authorization.
+
+---
+
+# 63. OAuth vs JWT
+
+These are not competitors.
+
+```text
+OAuth 2.0
+→ Authorization framework
+
+JWT
+→ Token format
+```
+
+You can have:
+
+```text
+OAuth + JWT access token
+```
+
+or:
+
+```text
+OAuth + Opaque access token
+```
+
+### Important Interview Answer
+
+> OAuth defines how authorization is granted and tokens are obtained/used. JWT is just one possible token representation.
+
+---
+
+# 64. OAuth vs OIDC
+
+```text
+OAuth 2.0
+→ Authorization
+
+OpenID Connect
+→ Authentication / identity
+```
+
+OIDC adds:
+
+```text
+ID Token
+User identity claims
+UserInfo endpoint
+Authentication semantics
+```
+
+Example:
+
+```text
+Login with Google
+```
+
+usually means:
+
+```text
+OIDC
+  +
+OAuth 2.0
+```
+
+---
+
+# 65. Common Security Attacks / Risks
+
+Know these for interviews:
+
+```text
+1. Authorization Code interception
+2. CSRF
+3. Redirect URI attacks
+4. Token theft
+5. Token leakage
+6. Refresh token theft
+7. Open redirect
+8. Scope escalation
+9. Audience confusion
+10. Client secret leakage
+11. Replay
+12. Incorrect token validation
+```
+
+---
+
+# 66. Security Best Practices
+
+## 1. Use HTTPS
+
+OAuth tokens are sensitive.
+
+Always protect them in transit.
+
+```text
+HTTPS
+```
+
+---
+
+## 2. Use Authorization Code + PKCE
+
+Especially for public clients.
+
+```text
+Mobile
+SPA
+```
+
+---
+
+## 3. Exact Redirect URI Validation
+
+Do not accept arbitrary redirect URIs.
+
+Bad:
+
+```text
+https://attacker.com/callback
+```
+
+Only registered redirect URIs should be accepted.
+
+---
+
+## 4. Use State
+
+Use unpredictable `state` values for authorization requests.
+
+---
+
+## 5. Least Privilege
+
+Request:
+
+```text
+read:photos
+```
+
+instead of:
+
+```text
+admin:*
+```
+
+when only read access is required.
+
+---
+
+## 6. Short-Lived Access Tokens
+
+Reduce exposure window.
+
+---
+
+## 7. Protect Refresh Tokens
+
+They are highly sensitive.
+
+---
+
+## 8. Validate Token Properly
+
+Do not only check the signature.
+
+Also consider:
+
+```text
+issuer
+audience
+expiration
+not-before where applicable
+scope
+algorithm/key expectations
+```
+
+---
+
+## 9. Never Log Tokens
+
+Avoid:
+
+```text
+Authorization: Bearer eyJ...
+```
+
+in application logs.
+
+Mask/redact secrets and credentials.
+
+---
+
+# 67. Token Storage
+
+For browser-based applications, token storage needs careful security design.
+
+Avoid casually storing sensitive tokens in places accessible to malicious JavaScript.
+
+For backend applications:
+
+```text
+Secure server-side storage
+```
+
+For mobile apps:
+
+```text
+OS-provided secure storage
+```
+
+The exact storage approach depends on the platform and architecture.
+
+---
+
+# 68. OAuth High Availability
+
+Authorization Server is critical infrastructure.
+
+Architecture:
+
+```text
+                  Load Balancer
+                       |
+          +------------+------------+
+          |            |            |
+          v            v            v
+        Auth-1       Auth-2       Auth-3
+          |            |            |
+          +------------+------------+
+                       |
+                  Shared Database
+                       |
+                  Token/Session Store
+                       |
+                  Key Management
+```
+
+Avoid single-instance authorization infrastructure.
+
+---
+
+# 69. OAuth Scalability
+
+Potential bottlenecks:
+
+```text
+Token generation
+Database
+Consent storage
+Refresh token store
+Introspection
+Key management
+```
+
+Scale using:
+
+```text
+Horizontal scaling
+Caching
+Read replicas
+Stateless token validation where appropriate
+Partitioning
+Connection pooling
+```
+
+---
+
+# 70. JWT Validation at Scale
+
+With self-contained JWTs:
+
+```text
+Request
+ ↓
+Resource Server
+ ↓
+Local signature validation
+ ↓
+Check claims
+ ↓
+Allow/Deny
+```
+
+No authorization-server round trip for every request.
+
+This improves scalability.
+
+But revocation becomes more difficult.
+
+---
+
+# 71. Introspection at Scale
+
+With opaque tokens:
+
+```text
+Request
+ ↓
+Resource Server
+ ↓
+Introspection Service
+ ↓
+Authorization decision
+```
+
+Potential issue:
+
+```text
+Millions of API requests
+        ↓
+Millions of introspection calls
+```
+
+Solutions:
+
+```text
+Caching
+High availability
+Connection pooling
+Rate limiting
+Circuit breakers
+```
+
+But caching authorization results introduces freshness/revocation trade-offs.
+
+---
+
+# 72. OAuth Login Sequence — Full Example
+
+```text
+1. User opens MyPhotoApp
+
+2. MyPhotoApp redirects:
+   /authorize
+
+3. Authorization Server:
+   - Authenticates user
+   - Shows consent
+
+4. User clicks Allow
+
+5. Authorization Server redirects:
+   /callback?code=ABC&state=XYZ
+
+6. MyPhotoApp verifies state
+
+7. MyPhotoApp calls:
+   POST /token
+
+8. Authorization Server verifies:
+   - code
+   - redirect_uri
+   - PKCE verifier
+   - client authentication where applicable
+
+9. Authorization Server returns:
+   access_token
+   refresh_token
+
+10. MyPhotoApp calls:
+    GET /photos
+    Authorization: Bearer ...
+
+11. Resource Server validates token
+
+12. Resource Server returns photos
+```
+
+---
+
+# 73. Scenario: Token Expired
+
+Request:
+
+```http
+GET /orders
+Authorization: Bearer OLD_TOKEN
+```
+
+Resource server:
+
+```text
+Token expired
+```
+
+Response:
+
+```http
+401 Unauthorized
+```
+
+Client:
+
+```text
+Use refresh token
+       ↓
+Request new access token
+       ↓
+Retry API
+```
+
+Do not blindly retry forever.
+
+---
+
+# 74. Scenario: Refresh Token Is Invalid
+
+Flow:
+
+```text
+Access Token expired
+       ↓
+Refresh Token
+       ↓
+Invalid / Revoked
+```
+
+Result:
+
+```text
+User must authenticate again
+```
+
+The application should clear invalid authentication state safely.
+
+---
+
+# 75. Scenario: User Revokes Consent
+
+Suppose:
+
+```text
+User → Revoke MyPhotoApp access
+```
+
+Authorization server should invalidate/revoke the relevant authorization state/tokens according to its implementation.
+
+Future API calls should stop being authorized.
+
+---
+
+# 76. Scenario: Attacker Steals Access Token
+
+Attacker:
+
+```text
+Bearer TOKEN
+```
+
+Can call:
+
+```text
+GET /photos
+```
+
+until:
+
+```text
+Token expires
+```
+
+Potential mitigations:
+
+```text
+Short token lifetime
+TLS
+Secure token storage
+Audience restrictions
+Least-privilege scopes
+Token sender-constraining techniques where appropriate
+Monitoring/revocation
+```
+
+---
+
+# 77. Scenario: Attacker Steals Authorization Code
+
+With PKCE:
+
+```text
+Attacker
+   |
+   | stolen code
+   v
+Token Endpoint
+   |
+   | no code_verifier
+   v
+REJECT
+```
+
+This is one of the important reasons PKCE is used.
+
+---
+
+# 78. Scenario: User Has Read Permission but Attempts DELETE
+
+Token:
+
+```text
+scope=photos:read
+```
+
+Request:
+
+```http
+DELETE /photos/123
+Authorization: Bearer TOKEN
+```
+
+Resource server checks:
+
+```text
+Required:
+photos:write
+
+Granted:
+photos:read
+```
+
+Result:
+
+```text
+403 Forbidden
+```
+
+---
+
+# 79. Scenario: One Token Used Against Wrong API
+
+Token:
+
+```json
+{
+  "aud": "orders-api"
+}
+```
+
+Attacker sends it to:
+
+```text
+payments-api
+```
+
+Payment API validates:
+
+```text
+aud == payments-api ?
+```
+
+No.
+
+Reject.
+
+This is why audience validation matters.
+
+---
+
+# 80. Scenario: Microservice Calls Another Service
+
+Requirement:
+
+```text
+Order Service → Payment Service
+```
+
+No end user involved.
+
+Use:
+
+```text
+Client Credentials
+```
+
+Flow:
+
+```text
+Order Service
+   ↓
+Authorization Server
+   ↓
+Access Token
+   ↓
+Payment Service
+```
+
+Do not use a user's browser authorization code for backend service-to-service communication.
+
+---
+
+# 81. Scenario: Mobile App
+
+Requirement:
+
+```text
+Mobile App → User's private data
+```
+
+Preferred:
+
+```text
+Authorization Code
++
+PKCE
+```
+
+Why?
+
+```text
+Mobile app cannot safely keep a client secret
+```
+
+---
+
+# 82. Scenario: SPA
+
+For a browser-based SPA:
+
+```text
+Authorization Code
++
+PKCE
+```
+
+is the modern direction.
+
+Do not embed a client secret in frontend JavaScript.
+
+---
+
+# 83. Scenario: Third-Party App Needs User Data
+
+Example:
+
+```text
+CalendarApp
+    ↓
+Google Calendar
+```
+
+Use:
+
+```text
+OAuth Authorization Code + PKCE
+```
+
+User sees:
+
+```text
+CalendarApp requests:
+Read calendar
+```
+
+User approves.
+
+CalendarApp receives an authorization grant and then tokens.
+
+---
+
+# 84. Scenario: Need Immediate Token Revocation
+
+Question:
+
+> JWT access tokens are valid for 1 hour. How can we revoke them immediately?
+
+Possible approaches:
+
+```text
+1. Shorter token lifetime
+2. Introspection
+3. Revocation/blocklist
+4. Token versioning
+5. Central authorization state
+```
+
+Trade-off:
+
+```text
+More immediate revocation
+       ↓
+More state/network dependency
+```
+
+There is no completely free revocation mechanism for already-issued self-contained JWTs.
+
+---
+
+# 85. Scenario: Authorization Server Goes Down
+
+Question:
+
+> What happens if the authorization server is unavailable?
+
+For already-issued JWTs with local validation:
+
+```text
+Client
+ ↓
+Resource Server
+ ↓
+Local token validation
+```
+
+The API may continue operating until tokens expire, depending on its design.
+
+For introspection-based tokens:
+
+```text
+Resource Server
+ ↓
+Authorization Server
+ ↓
+Unavailable
+```
+
+API authorization may be affected.
+
+Therefore OAuth architecture should consider:
+
+```text
+High availability
+Caching
+Timeouts
+Circuit breakers
+Graceful degradation
+```
+
+---
+
+# 86. Scenario: Resource Server Goes Down
+
+The authorization server may remain healthy:
+
+```text
+Auth Server → Healthy
+Resource Server → Down
+```
+
+Tokens can still be issued, but protected API calls fail.
+
+This shows:
+
+```text
+Authorization
+!=
+Business service availability
+```
+
+---
+
+# 87. Common Interview Questions
+
+## Q1. What is OAuth 2.0?
+
+> OAuth 2.0 is an authorization framework that allows a client to obtain limited access to protected resources without sharing the resource owner's password with the client.
+
+---
+
+## Q2. OAuth vs Authentication?
+
+> OAuth is primarily authorization. For authentication and identity, OpenID Connect is commonly used on top of OAuth 2.0.
+
+---
+
+## Q3. What are the four main OAuth roles?
+
+```text
+Resource Owner
+Client
+Authorization Server
+Resource Server
+```
+
+---
+
+## Q4. What is an access token?
+
+> A credential representing authorization to access protected resources.
+
+---
+
+## Q5. What is a refresh token?
+
+> A credential used to obtain a new access token when the old access token expires, when supported by the authorization server.
+
+---
+
+## Q6. Why use refresh tokens?
+
+> To keep access tokens short-lived while allowing the client to obtain new access tokens without repeatedly asking the user to authenticate.
+
+---
+
+## Q7. What is PKCE?
+
+> PKCE adds a proof between the client that started the authorization request and the client exchanging the authorization code, reducing the impact of authorization-code interception.
+
+---
+
+## Q8. Why do we need state?
+
+> `state` correlates the authorization response with the original authorization request and helps protect the browser-based flow against CSRF.
+
+---
+
+## Q9. What is scope?
+
+> Scope defines the permissions requested/granted to the client.
+
+Example:
+
+```text
+read:orders
+write:orders
+```
+
+---
+
+## Q10. Access token vs refresh token?
+
+```text
+Access Token:
+→ Call API
+
+Refresh Token:
+→ Obtain new Access Token
+```
+
+---
+
+## Q11. JWT vs OAuth?
+
+> OAuth is an authorization framework. JWT is a token format. OAuth can use JWT access tokens or opaque access tokens.
+
+---
+
+## Q12. What is OIDC?
+
+> OpenID Connect adds an identity/authentication layer on top of OAuth 2.0.
+
+---
+
+## Q13. Why not store the user's password in the client?
+
+> OAuth exists specifically to avoid giving third-party clients the user's authorization-server credentials.
+
+---
+
+## Q14. What is Client Credentials?
+
+> A grant used for machine-to-machine authorization where there is no end-user involved in the authorization request.
+
+---
+
+## Q15. What is 401 vs 403?
+
+```text
+401 → Missing/invalid authentication credentials
+
+403 → Authenticated/recognized but insufficient permission
+```
+
+---
+
+# 88. Advanced Interview Questions
+
+## Q16. Why is OAuth Authorization Code safer than sending credentials to the application?
+
+> The client never needs the user's authorization-server password. Authentication happens at the authorization server, and the client receives an authorization result rather than the user's credentials.
+
+---
+
+## Q17. Why use PKCE if we already have client_id?
+
+> `client_id` identifies the application but is not a secret. PKCE proves that the entity exchanging the authorization code possesses the secret value associated with the original authorization request.
+
+---
+
+## Q18. Can a JWT be revoked immediately?
+
+> Not naturally once issued. A self-contained JWT can remain cryptographically valid until expiration unless the resource server checks additional central state or uses another revocation mechanism.
+
+---
+
+## Q19. Why not make access tokens valid for 30 days?
+
+> Because a stolen token would have a large attack window. Short-lived access tokens reduce the impact of token theft.
+
+---
+
+## Q20. Why shouldn't a mobile app contain a client secret?
+
+> Because a mobile application is a public client. An attacker can extract embedded secrets from the application.
+
+Use:
+
+```text
+Authorization Code + PKCE
+```
+
+---
+
+## Q21. Should every microservice validate JWT?
+
+> Each service that directly accepts user access tokens should enforce the authorization rules it needs. In some architectures, an API gateway performs initial token validation, but downstream services should not blindly trust the gateway for all business authorization decisions.
+
+---
+
+## Q22. Why validate `aud`?
+
+> To make sure a token issued for one protected API is not incorrectly accepted by another API.
+
+---
+
+## Q23. Why validate `iss`?
+
+> To make sure the token came from the expected trusted authorization server.
+
+---
+
+## Q24. Can scope alone determine authorization?
+
+> Not always. Scope represents client permission, but business authorization may additionally depend on roles, resource ownership, tenant, object state, or other domain rules.
+
+---
+
+# 89. System Design Interview — Design OAuth Service
+
+### Requirements
+
+```text
+Functional:
+
+1. Register clients
+2. Authorize users
+3. Manage consent
+4. Issue access tokens
+5. Issue refresh tokens
+6. Validate tokens
+7. Revoke tokens
+8. Rotate signing keys
+9. Manage scopes
+10. Audit authorization activity
+```
+
+### Non-Functional
+
+```text
+High availability
+Low latency
+Horizontal scalability
+Security
+Fault tolerance
+Auditability
+```
+
+---
+
+# 90. High-Level Architecture
+
+```text
+                        Clients
+                           |
+                           v
+                    Load Balancer
+                           |
+               +-----------+-----------+
+               |                       |
+               v                       v
+      Authorization Server      API Gateway / Resource API
+               |
+       +-------+---------+
+       |       |         |
+       v       v         v
+   User DB  Client DB  Consent DB
+       |
+       v
+ Token / Session Store
+       |
+       +----------------+
+       |                |
+       v                v
+  Key Management      Audit Logs
+       |
+       v
+      JWKS
+```
+
+---
+
+# 91. Authorization Server Endpoints
+
+Common conceptual endpoints:
+
+```text
+GET  /authorize
+POST /token
+POST /revoke
+POST /introspect
+GET  /.well-known/openid-configuration   (OIDC/metadata)
+GET  /jwks
+```
+
+A production implementation may expose additional endpoints.
+
+---
+
+# 92. `/authorize`
+
+Purpose:
+
+```text
+Start user authorization
+```
+
+Example:
+
+```http
+GET /authorize?
+response_type=code&
+client_id=client123&
+redirect_uri=https://app.example.com/callback&
+scope=orders:read&
+state=abc123&
+code_challenge=XYZ&
+code_challenge_method=S256
+```
+
+---
+
+# 93. `/token`
+
+Purpose:
+
+```text
+Exchange authorization code
+or refresh token
+or client credentials
+```
+
+Authorization Code example:
+
+```http
+POST /token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&
+code=AUTH_CODE&
+redirect_uri=https://app.example.com/callback&
+client_id=client123&
+code_verifier=VERIFIER
+```
+
+---
+
+# 94. `/token` Client Credentials Example
+
+```http
+POST /token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&
+scope=payments:write
+```
+
+The client authenticates according to the authorization server's configured client authentication method.
+
+---
+
+# 95. `/introspect`
+
+Purpose:
+
+```text
+Check whether an opaque token is active
+and retrieve its authorization information.
+```
+
+Example:
+
+```http
+POST /introspect
+Content-Type: application/x-www-form-urlencoded
+
+token=OPAQUE_TOKEN
+```
+
+Response:
+
+```json
+{
+  "active": true,
+  "client_id": "client123",
+  "sub": "user123",
+  "scope": "orders:read",
+  "aud": "orders-api",
+  "exp": 1760000000
+}
+```
+
+---
+
+# 96. `/revoke`
+
+Purpose:
+
+```text
+Revoke a token.
+```
+
+Example:
+
+```http
+POST /revoke
+Content-Type: application/x-www-form-urlencoded
+
+token=REFRESH_TOKEN
+```
+
+---
+
+# 97. Token Service Design
+
+A token service should handle:
+
+```text
+Token generation
+Token signing
+Expiration
+Refresh
+Key selection
+Client validation
+Scope calculation
+Revocation where applicable
+```
+
+For JWT:
+
+```text
+Claims
++
+Private Key
+↓
+Signed JWT
+```
+
+---
+
+# 98. Token Validation Flow
+
+```text
+Client
+  |
+  | Bearer Token
+  v
+Resource Server
+  |
+  v
+Parse Token
+  |
+  v
+Validate Signature / Introspection
+  |
+  v
+Validate:
+- issuer
+- audience
+- expiry
+- scopes
+- token type where relevant
+  |
+  v
+Business Authorization
+  |
+  +---- DENY → 401 / 403
+  |
+  +---- ALLOW
+           |
+           v
+       Business Logic
+```
+
+---
+
+# 99. Authorization vs Authentication vs Business Authorization
+
+Three different layers:
+
+```text
+Authentication
+→ Who is the user?
+
+OAuth Authorization
+→ What can this client access?
+
+Business Authorization
+→ Can this specific subject perform this operation
+   on this specific resource?
+```
+
+Example:
+
+```text
+User = Alice
+
+OAuth scope:
+orders:write
+
+Request:
+DELETE /orders/123
+
+Business rule:
+Only order owner or admin can delete.
+
+Alice owns order 123?
+YES → Allow
+
+NO → Deny
+```
+
+---
+
+# 100. Important OAuth Trade-offs
+
+## JWT
+
+```text
+Pros:
+Fast local validation
+Highly scalable
+No central lookup per request
+
+Cons:
+Revocation harder
+Larger token
+Claims can become stale
+```
+
+## Opaque + Introspection
+
+```text
+Pros:
+Central control
+Easier revocation
+Small token
+
+Cons:
+Extra network dependency
+More latency
+More infrastructure
+```
+
+---
+
+# 101. OAuth Security Checklist
+
+```text
+✓ HTTPS everywhere
+✓ Authorization Code + PKCE for public clients
+✓ Validate redirect URIs
+✓ Validate state
+✓ Short-lived access tokens
+✓ Protect refresh tokens
+✓ Least-privilege scopes
+✓ Validate issuer
+✓ Validate audience
+✓ Validate expiration
+✓ Validate token signature correctly
+✓ Rotate signing keys
+✓ Do not log tokens/secrets
+✓ Do not embed client secrets in public apps
+✓ Use secure storage
+✓ Rate limit authorization/token endpoints
+✓ Monitor suspicious token activity
+✓ Audit consent and token events
+```
+
+---
+
+# 102. ⭐ Quick Recall Cheat Sheet
+
+```text
+OAUTH 2.0
+=========
+
+Purpose:
+Authorization framework.
+
+Main Roles:
+1. Resource Owner → User
+2. Client → Application
+3. Authorization Server → Issues authorization/tokens
+4. Resource Server → Protected API
+
+
+MAIN USER FLOW:
+===============
+
+Client
+ ↓
+/authorize
+ ↓
+Login + Consent
+ ↓
+Authorization Code
+ ↓
+/token
+ ↓
+Access Token
+ ↓
+API
+ ↓
+Resource Server
+
+
+MODERN USER FLOW:
+=================
+
+Authorization Code
++
+PKCE
+
+
+MACHINE-TO-MACHINE:
+===================
+
+Client Credentials
+
+
+IMPORTANT PARAMETERS:
+=====================
+
+client_id
+→ identifies client
+
+redirect_uri
+→ callback location
+
+scope
+→ permissions
+
+state
+→ protects authorization response correlation
+
+code_challenge
+→ PKCE challenge
+
+code_verifier
+→ proves client during token exchange
+
+
+TOKENS:
+=======
+
+Access Token
+→ Call protected API
+
+Refresh Token
+→ Get new access token
+
+
+JWT:
+====
+
+OAuth = authorization framework
+JWT = token format
+
+
+JWT CLAIMS:
+===========
+
+iss → issuer
+sub → subject
+aud → audience
+exp → expiration
+iat → issued time
+scope → permissions
+
+
+401 vs 403:
+===========
+
+401 → Missing/invalid credentials
+
+403 → Valid identity/token but insufficient permission
+
+
+PUBLIC CLIENT:
+==============
+
+Mobile
+SPA
+
+Use:
+Authorization Code + PKCE
+
+No embedded client secret.
+
+
+CONFIDENTIAL CLIENT:
+====================
+
+Backend/Web Server
+
+Can securely authenticate as a client.
+
+
+SCOPES:
+=======
+
+orders:read
+orders:write
+photos:read
+
+
+SECURITY:
+=========
+
+HTTPS
+PKCE
+state
+short token lifetime
+secure refresh token storage
+least privilege
+issuer validation
+audience validation
+signature validation
+key rotation
+no token logging
+
+
+JWT vs OPAQUE:
+==============
+
+JWT
+→ Local validation
+→ Scalable
+→ Harder revocation
+
+Opaque
+→ Introspection
+→ Central control
+→ More network dependency
+
+
+OAUTH vs OIDC:
+==============
+
+OAuth → Authorization
+OIDC   → Authentication / Identity
+
+
+GOLDEN RULE:
+============
+
+OAuth answers:
+"What is this client allowed to access?"
+
+OIDC answers:
+"Who is this user?"
+```
+
+---
+
+# 103. ⭐ 30-Second Interview Answer
+
+> **"OAuth 2.0 is an authorization framework that allows a client to access protected resources without receiving the user's password. The main components are the Resource Owner, Client, Authorization Server, and Resource Server. For a modern user-facing application, I would generally use Authorization Code with PKCE. The client redirects the user to the authorization server, the user authenticates and gives consent, and the client receives a short-lived authorization code. The client exchanges that code, along with the PKCE verifier, for an access token and optionally a refresh token. The access token is then sent to the resource server as a Bearer token. The resource server validates the token, including issuer, audience, expiration, signature, and required scope, and then applies business-level authorization. For service-to-service communication without a user, I would use Client Credentials. For token design, I would choose JWT when local scalable validation is valuable and opaque tokens with introspection when centralized control and revocation are more important."**
+
+---
+
+# 104. Final System Design Mental Model
+
+```text
+                    OAUTH 2.0
+                       |
+         +-------------+-------------+
+         |                           |
+      USER FLOW                 MACHINE FLOW
+         |                           |
+ Authorization Code             Client Credentials
+         |
+        PKCE
+         |
+         v
+Authorization Server
+         |
+         +---- Login
+         +---- Consent
+         +---- Client validation
+         +---- Scope
+         +---- Token issuance
+         +---- Refresh
+         +---- Revocation
+         +---- Key management
+         |
+         v
+     Access Token
+         |
+         v
+   Resource Server
+         |
+         +---- Validate Token
+         +---- Check Audience
+         +---- Check Scope
+         +---- Business Authorization
+         |
+         v
+      Protected API
+```
+
+### The 5 things to remember for an interview
+
+```text
+1. OAuth = Authorization, not authentication.
+2. Authorization Code + PKCE = modern user-facing flow.
+3. Client Credentials = service-to-service.
+4. Access Token = call API; Refresh Token = get new Access Token.
+5. Resource Server must validate token + enforce business authorization.
+```

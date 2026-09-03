@@ -710,10 +710,37 @@ Consistency Availability
 
 > **"CAP theorem says that when a network partition occurs in a distributed system, you must trade off strong Consistency and Availability. Since Partition Tolerance is generally required, the practical choice is usually CP or AP based on the business requirement."**
 
+---
+---
+
 ## 🧠 Memory Trick
 
-**C = Correct data**  
-**A = Always respond**  
-**P = Partition survives**
+*   **C - Consistency:** Every node returns the exact same, most recent data.
+*   **A - Availability:** Every non-failing node returns a response (no errors or timeouts).
+*   **P - Partition Tolerance:** The system continues to operate despite network drops or lost messages.
 
 **Partition happens → Choose Correctness or Availability.**
+
+
+---
+---
+
+### 🌐 The CAP Theorem Trade-off
+
+In reality, networks always experience drops, so you **must choose Partition Tolerance (P)**. This leaves a direct choice:
+
+---
+
+* **CP Systems (ACID Focus):** 
+  * Choose **Consistency** over Availability (e.g., Banking). 
+  * The system errors out or times out if nodes cannot sync up safely.
+  
+---
+
+* **AP Systems (BASE Focus):** 
+  * Choose **Availability** over Consistency (e.g., Social Media feeds). 
+  * The system serves older, stale data rather than crashing or throwing an error.
+
+---
+
+
