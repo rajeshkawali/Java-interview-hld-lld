@@ -22,7 +22,7 @@ Let's understand each one with a simple example.
 
 In simple words:
 
-> **One class should do one main job.**
+> ** One class should do one main job. **
 
 ---
 
