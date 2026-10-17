@@ -1,7 +1,7 @@
 # Hibernate Interview Preparation — Part 2
 ## Advanced Hibernate, Internals, Performance, Transactions, Caching & Senior-Level Interview Questions
 
-> **Prerequisite:** Hibernate/JPA fundamentals covered in Part 1  
+> **Prerequisite:** Hibernate / JPA fundamentals covered in Part 1  
 > **Level:** Intermediate → Advanced → Senior  
 > **Focus:** Internal working, performance tuning, tricky questions, production scenarios, and interview depth
 
