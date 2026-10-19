@@ -155,7 +155,7 @@ refresh()
 
 ---
 
-## Hibernate Session
+## Hibernate Session 
 
 `Session` is Hibernate-specific.
 
@@ -163,7 +163,7 @@ refresh()
 Session session;
 ```
 
-It provides Hibernate-specific capabilities in addition to standard persistence functionality.
+It provides Hibernate specific capabilities in addition to standard persistence functionality.
 
 Conceptually:
 
