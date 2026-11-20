@@ -1,8 +1,5 @@
 # Java & Spring Boot Backend Interview Guide
 
-> **Goal:** Simple, detailed, interview-ready notes in short bullet points, with request flows, examples, trade-offs, and practical best practices.
->
-> **How to extend:** Add a new numbered section using the [topic template](#template-for-new-topics), then add its link to the contents.
 
 ## Table of Contents
 
