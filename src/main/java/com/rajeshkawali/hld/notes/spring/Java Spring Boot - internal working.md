@@ -3,26 +3,27 @@
 
 ## Table of Contents
 
-1. [Tomcat architecture and request flow](#1-tomcat-architecture-and-request-flow)
-2. [Spring Boot internal working](#2-spring-boot-internal-working)
-3. [@EnableAutoConfiguration internals](#3-enableautoconfiguration-internals)
-4. [API request flow: client to server](#4-api-request-flow-client-to-server)
-5. [TCP, UDP, HTTP, gRPC and WebSocket](#5-tcp-udp-http-grpc-and-websocket)
-6. [Spring transactions and internals](#6-spring-transactions-and-internals)
-7. [Redis strategies and eviction](#7-redis-strategies-and-eviction)
-8. [Load balancers and algorithms](#8-load-balancers-and-algorithms)
-9. [Spring Security internals](#9-spring-security-internals)
-10. [OAuth 2.0 and JWT](#10-oauth-20-and-jwt)
-11. [Industry-standard Spring Boot API design](#11-industry-standard-spring-boot-api-design)
-12. [Spring bean lifecycle and scopes](#12-spring-bean-lifecycle-and-scopes)
-13. [Hibernate/JPA internals, lazy loading, and N+1 queries](#13-hibernatejpa-internals-lazy-loading-and-n1-queries)
-14. [Kafka: partitions, consumer groups, and delivery semantics](#14-kafka-partitions-consumer-groups-and-delivery-semantics)
-15. [Microservices, saga, outbox, and distributed tracing](#15-microservices-saga-outbox-and-distributed-tracing)
-16. [Docker, Kubernetes, and deployment strategies](#16-docker-kubernetes-and-deployment-strategies)
-17. [Database indexing, locking, and query optimization](#17-database-indexing-locking-and-query-optimization)
-18. [Resilience4j, rate limiting, and circuit breakers](#18-resilience4j-rate-limiting-and-circuit-breakers)
-19. [Rapid revision questions](#rapid-revision-questions)
-20. [Template for new topics](#template-for-new-topics)
+1. Tomcat Architecture and Request Flow
+2. Spring Boot Internal Working
+3. @EnableAutoConfiguration Internals
+4. API Request Flow: Client to Server
+5. TCP, UDP, HTTP, gRPC, and WebSocket
+6. Spring Transactions and Internals
+7. Redis Strategies and Eviction
+8. Load Balancers and Algorithms
+9. Spring Security Internals
+10. OAuth 2.0 and JWT
+11. Industry-Standard Spring Boot API Design
+12. Spring Bean Lifecycle and Scopes
+13. Hibernate/JPA Internals, Lazy Loading, and N+1 Queries
+14. Kafka: Partitions, Consumer Groups, and Delivery Semantics
+15. Microservices, Saga, Outbox, and Distributed Tracing
+16. Docker, Kubernetes, and Deployment Strategies
+17. Database Indexing, Locking, and Query Optimization
+18. Resilience4j, Rate Limiting, and Circuit Breakers
+19. Rapid Revision Questions
+20. Template for New Topics
+
 
 ---
 
