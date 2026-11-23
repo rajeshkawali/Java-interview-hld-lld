@@ -1,4 +1,4 @@
-# Java & Spring Boot Backend Interview Guide
+# Java & Spring Boot Backend
 
 
 ## Table of Contents
@@ -23,6 +23,7 @@
 18. Resilience4j, Rate Limiting, and Circuit Breakers
 19. Rapid Revision Questions
 20. Template for New Topics
+21. Corrections and Interview-Ready Spring Boot Summary
 
 
 ---
@@ -37,7 +38,7 @@
 
 ### Main components
 - **Server:** Top-level Tomcat instance; manages services and lifecycle.
-- **Service:** Groups a **Connector** with an **Engine**.
+- **Service:** Associates one **Engine** (container) with one or more **Connectors**.
 - **Connector:** Listens on a port (often `8080`), manages connections, parses HTTP, and writes responses.
 - **Engine:** Routes a request to the correct virtual host.
 - **Host:** Represents a virtual host/domain.
@@ -116,22 +117,21 @@ class HelloController {
 main() -> SpringApplication.run()
        -> Determine application type (Servlet / Reactive / None)
        -> Prepare Environment and load configuration
-       -> Create ApplicationContext
-       -> Register configuration classes and bean definitions
-       -> Apply auto-configuration and bean post-processors
-       -> Instantiate eligible singleton beans / inject dependencies
-       -> Start embedded server (Servlet web app)
-       -> Run ApplicationRunner / CommandLineRunner
-       -> Application ready
+       -> Create the appropriate ApplicationContext
+       -> Load bean definitions (component scan, @Bean, auto-configuration)
+       -> Refresh context: register post-processors, create and wire beans
+          (the embedded web server is created/started during web-context refresh)
+       -> Publish started event; run ApplicationRunner / CommandLineRunner
+       -> Publish ready event (if startup completes successfully)
 ```
 
 ### Important concepts
 - **IoC container:** Creates, wires, and manages Spring beans.
-- **Bean:** An object managed by the Spring container.
-- **Component scan:** Discovers `@Component`, `@Service`, `@Repository`, `@Controller`, etc.
+- **Bean:** An object managed by the Spring container; not every Java object is a Spring bean.
+- **Component scan:** Discovers eligible annotated classes in the configured scan packages (normally the application package and its subpackages).
 - **Dependency injection:** Supplies dependencies, preferably through constructors.
 - **Starter:** Dependency bundle such as `spring-boot-starter-web`.
-- **Auto-configuration:** Creates infrastructure beans only when relevant conditions match.
+- **Auto-configuration:** Contributes configuration and bean definitions when relevant conditions match; custom beans can often override defaults.
 - **Externalized configuration:** Reads properties from files, environment variables, and other sources with precedence rules.
 - **Actuator:** Exposes operational endpoints such as health and metrics when configured.
 
@@ -588,8 +588,8 @@ Client -> DNS -> Load Balancer
 
 ### What is Spring Security?
 - A framework for authentication, authorization, and common web security defenses.
-- **Authentication:** Who are you?
-- **Authorization:** Are you allowed to do this?
+- **Authentication:** Who are you? (Verification of identity or credentials.)
+- **Authorization:** Are you allowed to do this? (Requires both endpoint and resource-level checks where appropriate.)
 - Spring Security commonly runs through Servlet filters **before** the controller.
 
 ### Internal request flow
@@ -646,7 +646,7 @@ class SecurityConfig {
 - Request proceeds to controller if permitted.
 
 ### 401 vs 403
-- **401 Unauthorized:** No valid authentication credentials for a protected resource.
+- **401 Unauthorized:** Authentication is missing or invalid for a protected resource (despite the HTTP status name).
 - **403 Forbidden:** Identity may be known, but access is denied (or a security policy blocks the request).
 
 ### Best practices
@@ -990,7 +990,7 @@ class StartupBean {
 - `EntityManager` is the JPA API; Hibernate's `Session` is its underlying persistence context API.
 - **Persistence context (first-level cache)** tracks managed entities by identity within an entity manager/session.
 - **Entity states:** transient → managed → detached; removed entities are scheduled for deletion.
-- **Dirty checking:** Hibernate compares managed entity state with its snapshot and generates updates at flush time.
+- **Dirty checking:** Hibernate detects changes to managed entities and can generate SQL updates during flush (the detection strategy depends on configuration/enhancement).
 - **Flush** synchronizes queued SQL with the database; **commit** completes the transaction. A flush is not a commit.
 - **Second-level cache** is optional and configured separately; it is not a replacement for query optimization.
 
@@ -999,7 +999,7 @@ class StartupBean {
 Controller → Service (@Transactional) → Repository → EntityManager
     → persistence context → Hibernate SQL generation → JDBC → Database
     ← rows → entity mapping / identity tracking ← results
-Transaction commit → flush pending changes → database commit
+Transaction completion → flush pending changes when required → database commit (or rollback)
 ```
 
 ### Lazy vs eager loading
@@ -1433,3 +1433,78 @@ resilience4j:
 
 ---
 
+
+---
+
+## Corrections and Interview-Ready Spring Boot Summary
+
+### Important clarifications
+
+1. **Spring Boot is not a separate replacement for Spring.** It uses the Spring Framework and simplifies configuration, dependency management, and running applications.
+2. **`@SpringBootApplication` is a combination of three annotations:** `@SpringBootConfiguration`, `@EnableAutoConfiguration`, and `@ComponentScan`. Auto-configuration is conditional; it does not create every possible bean.
+3. **`SpringApplication.run()` does more than create beans.** It prepares the environment, creates and refreshes the application context, starts the embedded server when appropriate, executes runners, and signals readiness. The server startup happens as part of context refresh, so the startup flow is a conceptual summary rather than a strictly sequential list of all internals.
+4. **Embedded Tomcat is not mandatory.** It is a common default for Spring MVC when using the servlet web starter, but Jetty or another supported server can be selected. Reactive applications commonly use Reactor Netty. Non-web applications need no HTTP server.
+5. **Tomcat does not directly invoke controller methods.** It invokes the servlet filter chain and the Spring MVC `DispatcherServlet`, which uses handler mappings and adapters to dispatch to a controller.
+6. **Dependency injection is not the same as component scanning.** Scanning finds candidate bean definitions; the IoC container creates and wires beans. Constructor injection is generally preferred.
+7. **`@Transactional` is normally proxy-based.** Calls made within the same object can bypass the proxy, and checked exceptions do not trigger rollback by default unless configured. A local transaction does not roll back external API calls.
+8. **JWT is a token format, not an authentication protocol.** OAuth 2.0 is for delegated authorization; OpenID Connect adds standardized identity. A signed JWT is not encrypted by default.
+9. **Kafka guarantees ordering within a partition, not across a topic.** Processing an event and then committing the offset commonly gives at-least-once processing; external database side effects must still be idempotent.
+10. **Caching and resilience require explicit trade-offs.** Redis TTL is different from eviction; a circuit breaker is different from a timeout; retries must be bounded and safe.
+
+### Spring Boot internal working — 30-second interview answer
+
+> "When my Spring Boot application starts, the main method calls `SpringApplication.run()`. Spring Boot prepares configuration, creates an ApplicationContext, discovers components, and applies conditional auto-configuration. The Spring IoC container creates beans and injects their dependencies. For a Spring MVC web application, the embedded servlet server starts during application-context initialization. When a request arrives, Tomcat passes it through filters to `DispatcherServlet`, which finds the controller. The controller calls the service and repository, and Spring converts the result into an HTTP response."
+
+**Remember:** `SpringApplication.run()` · `@SpringBootApplication` · `ApplicationContext` · `@ComponentScan` · `@EnableAutoConfiguration` · Dependency Injection · Tomcat · `DispatcherServlet`.
+
+### Simple example
+
+```java
+@SpringBootApplication
+public class EmployeeApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(EmployeeApplication.class, args);
+    }
+}
+
+@Service
+class EmployeeService {
+    String getEmployeeName() {
+        return "Asha";
+    }
+}
+
+@RestController
+class EmployeeController {
+    private final EmployeeService service;
+
+    EmployeeController(EmployeeService service) {
+        this.service = service;
+    }
+
+    @GetMapping("/employees/name")
+    String employeeName() {
+        return service.getEmployeeName();
+    }
+}
+```
+
+**Request:** `GET /employees/name` → Tomcat → filters → `DispatcherServlet` → `EmployeeController` → `EmployeeService` → response body `Asha`.
+
+### Quick revision keywords
+
+| Area | Keywords |
+| --- | --- |
+| Startup | `main`, `SpringApplication.run`, Environment, ApplicationContext |
+| Auto-configuration | `@EnableAutoConfiguration`, conditions, classpath, properties |
+| Beans | IoC, component scanning, constructor injection, scopes |
+| Web requests | Tomcat, filters, `DispatcherServlet`, handler mapping |
+| Data | JPA, persistence context, transactions, dirty checking |
+| Security | `SecurityFilterChain`, OAuth 2.0, OIDC, JWT, authorization |
+| Reliability | Kafka offsets, idempotency, retries, circuit breakers |
+
+### Study notes
+
+- The earlier sections provide deeper explanations and illustrative code; use the 30-second answer for the initial interview response.
+- Always check the specific Spring Boot, Spring Security, Hibernate, and Resilience4j versions used in your project before copying configuration.
+- The examples intentionally omit some imports, persistence configuration, and production concerns.
