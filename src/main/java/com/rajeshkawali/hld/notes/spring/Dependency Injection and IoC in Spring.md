@@ -3357,20 +3357,3 @@ does not eliminate all coupling
 but encourages dependency on abstractions
 ```
 
-## Interview traps checklist
-
-- [ ] IoC is a principle; DI is a technique.
-- [ ] DI can exist without Spring.
-- [ ] Spring does not manage every object created with `new`.
-- [ ] `@Autowired` is not required on a single constructor.
-- [ ] Constructor injection is generally preferred.
-- [ ] Multiple beans of the same type can cause ambiguity.
-- [ ] `@Primary` and `@Qualifier` can resolve ambiguity.
-- [ ] Spring singleton does not mean thread-safe.
-- [ ] Spring singleton means one instance per application context.
-- [ ] Circular dependencies are usually a design problem.
-- [ ] `@Service` makes a class a component candidate; it is not itself "Dependency Injection."
-- [ ] `ApplicationContext` is the commonly used Spring IoC container interface.
-- [ ] DI improves testability and loose coupling.
-- [ ] DI does not automatically make architecture good.
-- [ ] Programming against interfaces makes DI significantly more useful.
